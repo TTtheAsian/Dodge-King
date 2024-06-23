@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>躲避大師</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        #gameContainer {
+            position: relative;
+            width: 400px;
+            height: 520px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #gameCanvas {
+            border: 2px solid #333;
+            background-color: #fff;
+        }
+        #startButton {
+            font-size: 18px;
+            padding: 10px 20px;
+            margin-top: 20px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        #joystick {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            background-color: rgba(0,0,0,0.1);
+            border-radius: 50%;
+            margin-top: 20px;
+        }
+        #stick {
+            position: absolute;
+            top: 25px;
+            left: 25px;
+            width: 50px;
+            height: 50px;
+            background-color: rgba(0,0,0,0.5);
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <h1>躲避大師</h1>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        <div id="joystick">
+            <div id="stick"></div>
+        </div>
+    </div>
+    <button id="startButton">開始遊戲</button>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startButton = document.getElementById('startButton');
+        const joystick = document.getElementById('joystick');
+        const stick = document.getElementById('stick');
+
+        let player, enemies, gameTime, isGameOver, joystickData;
+
+        class Player {
+            constructor(x, y, radius, speed) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.speed = speed;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'blue';
+                ctx.fill();
+            }
+
+            update() {
+                this.x += joystickData.x * this.speed;
+                this.y += joystickData.y * this.speed;
+                this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
+                this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y));
+            }
+        }
+
+        class Enemy {
+            constructor(x, y, radius, speed) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.speed = speed;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'red';
+                ctx.fill();
+            }
+
+            update() {
+                const dx = player.x - this.x;
+                const dy = player.y - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                this.x += (dx / distance) * this.speed;
+                this.y += (dy / distance) * this.speed;
+            }
+        }
+
+        function init() {
+            player = new Player(canvas.width / 2, canvas.height / 2, 10, 3);
+            enemies = [];
+            gameTime = 0;
+            isGameOver = false;
+            joystickData = { x: 0, y: 0 };
+        }
+
+        function update() {
+            player.update();
+
+            if (gameTime % 60 === 0) {
+                enemies.push(new Enemy(
+                    Math.random() * canvas.width,
+                    Math.random() * canvas.height,
+                    5,
+                    Math.random() * 2 + 1
+                ));
+            }
+
+            enemies.forEach(enemy => {
+                enemy.update();
+                if (Math.hypot(player.x - enemy.x, player.y - enemy.y) < player.radius + enemy.radius) {
+                    isGameOver = true;
+                }
+            });
+
+            gameTime++;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            player.draw();
+            enemies.forEach(enemy => enemy.draw());
+
+            ctx.fillStyle = 'black';
+            ctx.font = '20px Arial';
+            ctx.fillText('時間: ' + Math.floor(gameTime / 60), 10, 30);
+        }
+
+        function gameLoop() {
+            if (!isGameOver) {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            } else {
+                alert('遊戲結束! 生存時間: ' + Math.floor(gameTime / 60) + ' 秒');
+                startButton.style.display = 'block';
+            }
+        }
+
+        startButton.addEventListener('click', () => {
+            init();
+            startButton.style.display = 'none';
+            gameLoop();
+        });
+
+        // 搖桿控制
+        let isDragging = false;
+
+        function handleStart(e) {
+            isDragging = true;
+            handleMove(e);
+        }
+
+        function handleMove(e) {
+            if (isDragging) {
+                const joystickRect = joystick.getBoundingClientRect();
+                const centerX = joystickRect.left + joystickRect.width / 2;
+                const centerY = joystickRect.top + joystickRect.height / 2;
+                const touch = e.touches ? e.touches[0] : e;
+                const dx = touch.clientX - centerX;
+                const dy = touch.clientY - centerY;
+                const distance = Math.min(joystickRect.width / 2, Math.hypot(dx, dy));
+                const angle = Math.atan2(dy, dx);
+                const stickX = Math.cos(angle) * distance;
+                const stickY = Math.sin(angle) * distance;
+                stick.style.transform = `translate(${stickX}px, ${stickY}px)`;
+                joystickData.x = stickX / (joystickRect.width / 2);
+                joystickData.y = stickY / (joystickRect.height / 2);
+            }
+        }
+
+        function handleEnd() {
+            isDragging = false;
+            stick.style.transform = 'translate(0px, 0px)';
+            joystickData = { x: 0, y: 0 };
+        }
+
+        joystick.addEventListener('mousedown', handleStart);
+        joystick.addEventListener('touchstart', handleStart);
+        document.addEventListener('mousemove', handleMove);
+        document.addEventListener('touchmove', handleMove);
+        document.addEventListener('mouseup', handleEnd);
+        document.addEventListener('touchend', handleEnd);
+    </script>
+</body>
+</html>
